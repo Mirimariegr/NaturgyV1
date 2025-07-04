@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chatbot Naturgy</title>
+  <style>
+    /* ---------- ESTILOS INSPIRADOS EN NATURGY ---------- */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f6f9fc;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      color: #003057;
+    }
+    header {
+      background: #003057;
+      color: #ffffff;
+      padding: 1rem;
+      text-align: center;
+      font-size: 1.75rem;
+      font-weight: bold;
+      letter-spacing: 1px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+    #chatArea {
+      flex: 1;
+      padding: 1rem;
+      overflow-y: auto;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+    }
+    .message {
+      max-width: 75%;
+      margin-bottom: 1rem;
+      padding: 1rem 1.2rem;
+      border-radius: 1.2rem;
+      font-size: 1rem;
+      line-height: 1.6;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+    .user {
+      align-self: flex-end;
+      background-color: #ffb511;
+      color: #003057;
+      border-bottom-right-radius: 0;
+    }
+    .bot {
+      align-self: flex-start;
+      background-color: #e5edf3;
+      color: #003057;
+      border-bottom-left-radius: 0;
+      border: 1px solid #d0dce5;
+    }
+    footer {
+      background: #f6f9fc;
+      padding: 1rem;
+      border-top: 1px solid #ccc;
+      box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.05);
+    }
+    #controls {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 0.8rem 1rem;
+      font-size: 1rem;
+      border: 1px solid #bbb;
+      border-radius: 0.75rem;
+      transition: border-color 0.3s ease;
+    }
+    input[type="text"]:focus {
+      border-color: #ffb511;
+      outline: none;
+    }
+    input[type="file"] {
+      display: none;
+    }
+    #fileLabel {
+      background: #ffffff;
+      color: #003057;
+      padding: 0.6rem 1rem;
+      border-radius: 0.75rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+      border: 1px solid #ccc;
+      white-space: nowrap;
+    }
+    #sendButton {
+      background: #003057;
+      color: white;
+      padding: 0.6rem 1.2rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 0.75rem;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+    #sendButton:hover {
+      background: #002244;
+    }
+    #sendButton:disabled {
+      background: #9db4c4;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <header>🤖 Asistente Virtual Naturgy</header>
+
+  <div id="chatArea"></div>
+
+  <footer>
+    <form id="chatForm" autocomplete="off">
+      <div id="controls">
+        <input type="text" id="messageInput" placeholder="Escribe tu mensaje..." required />
+
+        <label id="fileLabel" for="fileInput">📎 Archivo</label>
+        <input type="file" id="fileInput" accept="image/*,application/pdf" />
+
+        <button id="sendButton" type="submit">Enviar</button>
+      </div>
+    </form>
+  </footer>
+
+  <script>
+    const SERENITY_BASE_URL = 'https://api.serenitystar.ai/api';
+    const SERENITY_API_KEY  = '1FC6AECB-435A-4031-9FFB-BA6F92C56FFA';
+
+    async function callSerenity(message, file = null) {
+      const options = {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SERENITY_API_KEY}`
+        }
+      };
+
+      if (file) {
+        const formData = new FormData();
+        formData.append('message', message);
+        formData.append('file', file);
+        options.body = formData;
+
+        let endpoint = '/chat-file';
+        if (file.type.startsWith('image/')) endpoint = '/chat-image';
+        else if (file.type === 'application/pdf') endpoint = '/chat-pdf';
+
+        const res = await fetch(`${SERENITY_BASE_URL}${endpoint}`, options);
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+      }
+
+      options.headers['Content-Type'] = 'application/json';
+      options.body = JSON.stringify({ message });
+      const res = await fetch(`${SERENITY_BASE_URL}/chat`, options);
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
+    }
+
+    const chatArea   = document.getElementById('chatArea');
+    const chatForm   = document.getElementById('chatForm');
+    const messageInp = document.getElementById('messageInput');
+    const fileInput  = document.getElementById('fileInput');
+    const sendBtn    = document.getElementById('sendButton');
+
+    fileInput.addEventListener('change', () => {
+      const label = document.getElementById('fileLabel');
+      label.textContent = fileInput.files.length ? `📎 ${fileInput.files[0].name}` : '📎 Archivo';
+    });
+
+    chatForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!messageInp.value.trim() && !fileInput.files.length) return;
+
+      appendMessage(messageInp.value, 'user');
+
+      try {
+        sendBtn.disabled = true;
+        const file = fileInput.files[0] || null;
+        const data = await callSerenity(messageInp.value, file);
+        appendMessage(data.reply || '[Respuesta vacía]', 'bot');
+      } catch (error) {
+        appendMessage('⚠️ Error: ' + error.message, 'bot');
+      } finally {
+        messageInp.value = '';
+        fileInput.value = '';
+        document.getElementById('fileLabel').textContent = '📎 Archivo';
+        sendBtn.disabled = false;
+        messageInp.focus();
+      }
+    });
+
+    function appendMessage(text, sender) {
+      const msg = document.createElement('div');
+      msg.className = `message ${sender}`;
+      msg.textContent = text;
+      chatArea.appendChild(msg);
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+  </script>
+</body>
+</html>
